@@ -1,0 +1,59 @@
+# A quick and dirty script to run on a PC in the environment if trying to track and correlate DNS lookup failures
+
+#---------------------------------------------------------------------------------------------------------------
+
+# Define the target domain
+$targetDomain = "www.example.com"
+
+# Define the log file path
+$logFile = "C:\temp\DNSLookups.log"
+
+# Define email parameters
+$smtpServer = ""
+$from = ""
+$to = ""
+$subject = "DNS Lookup Failure Alert"
+$body = "The script has encountered 3 consecutive DNS lookup failures."
+
+# Function to log the DNS lookup result with a timestamp
+function Log-DnsLookupResult {
+    param (
+        [string]$targetDomain
+    )
+
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    try {
+        # Perform DNS lookup without using cached records
+        $dnsResult = Resolve-DnsName -Name $targetDomain -NoHostsFile -DnsOnly
+        $status = "Success"
+    } catch {
+        $status = "Failure"
+    }
+
+    $logEntry = "$timestamp - DNS lookup for $targetDomain : $status"
+    Add-Content -Path $logFile -Value $logEntry
+
+    return $status
+}
+
+# Initialize failure count
+$failureCount = 0
+
+# Run the DNS lookup and log indefinitely at 3-second intervals
+while ($true) {
+    $status = Log-DnsLookupResult -targetDomain $targetDomain
+
+    if ($status -eq "Failure") {
+        $failureCount++
+    } else {
+        $failureCount = 0
+    }
+
+    if ($failureCount -ge 3) {
+        Send-MailMessage -SmtpServer $smtpServer -From $from -To $to -Subject $subject -Body $body
+		# Reset the failure count after sending the email
+        $failureCount = 0 
+    }
+
+    Start-Sleep -Seconds 3
+}
